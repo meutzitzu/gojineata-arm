@@ -65,6 +65,7 @@ class Jointuletz
 
 	public:
 	Jointuletz( Motorash* motor, Encoderutz* encoder, Controlerutz* controller);
+	~Jointuletz();
 
 	void setBounds( float lower, float upper);
 	void setPosition( float angle);
@@ -149,6 +150,12 @@ Jointuletz::Jointuletz( Motorash* motor, Encoderutz* encoder, Controlerutz* cont
 	m_upper_bound = 0.0;
 	m_lower_bound = 0.0;
 	m_position = 0.0;
+}
+Jointuletz::~Jointuletz()
+{
+	delete m_motor;
+	delete m_encoder;
+	delete m_controller;
 }
 
 void Jointuletz::setBounds(float lower, float upper)
