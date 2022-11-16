@@ -38,19 +38,44 @@ class Encoderutz
 	float getAngle();
 };
 
-class Jointuletz
+class Controlerutz
 {
-	Motorash m_motor;
-	Encoderutz m_encoder;
+	float m_kp;
+	float m_ki;
+	float m_kd;
 
-	float lower_bound;
-	float upper_bound;
+	float m_P;
+	float m_I;
+	float m_D;
 
 	public:
-	Jointuletz( Motorash m_motor, Encoderutz m_encoder);
+	Controlerutz( float p, float i, float d);
+	float getControlPower(float error);
+};
 
+class Jointuletz
+{
+	Motorash* m_motor;
+	Encoderutz* m_encoder;
+	Controlerutz* m_controller;
+
+	float m_lower_bound;
+	float m_upper_bound;
+	float m_position;
+
+	public:
+	Jointuletz( Motorash* motor, Encoderutz* encoder, Controlerutz* controller);
+
+	void setBounds( float lower, float upper);
 	void setPosition( float angle);
+	void control();
 	float getPosition();
+};
+
+
+class Robotzel
+{
+	//Joint** joints;
 };
 
 Motorash::Motorash( byte id, Direction direction)
@@ -58,6 +83,7 @@ Motorash::Motorash( byte id, Direction direction)
 	m_motor = new AF_DCMotor(id);
 	m_id = id;
 	setPower(0.0);
+	m_direction = direction;
 }
 
 Motorash::~Motorash()
@@ -77,12 +103,11 @@ Direction Motorash::getDirection()
 
 void Motorash::setPower( float power)
 {
-	m_power = (int)m_direction * power;
+	m_power = (int)(static_cast<int>(m_direction) * power);
 	m_truepower = (byte)(abs( 255 * m_power));
 	m_motor->setSpeed(m_truepower);
 	m_motor->run( m_power > 0 ? FORWARD : BACKWARD);
 }
-
 
 Encoderutz::Encoderutz( byte pin, int center)
 {
@@ -95,7 +120,58 @@ float Encoderutz::getAngle()
 	return ((int)m_direction * (analogRead(m_pin)-m_center)/((350/180)*PI));
 }
 
-Motorash* motor1 = new Motorash( 3, Direction::forward);
+Controlerutz::Controlerutz( float kp, float ki, float kd)
+{
+	m_kp = kp;
+	m_ki = ki;
+	m_kd = kd;
+
+	m_P = 0.0;
+	m_I = 0.0;
+	m_D = 0.0;
+}
+
+
+float Controlerutz::getControlPower( float error)
+{
+	m_D = error - m_P;
+	m_P = error;
+	m_I += error;
+
+	return m_kp*m_P + m_ki*m_I + m_kd*m_D;
+}
+
+Jointuletz::Jointuletz( Motorash* motor, Encoderutz* encoder, Controlerutz* controller)
+{
+	m_motor = motor;
+	m_encoder = encoder;
+	m_controller = controller;
+	m_upper_bound = 0.0;
+	m_lower_bound = 0.0;
+	m_position = 0.0;
+}
+
+void Jointuletz::setBounds(float lower, float upper)
+{
+	m_upper_bound = upper;
+	m_lower_bound = lower;
+}
+
+void Jointuletz::setPosition( float position)
+{
+	m_position = position;
+}
+
+void Jointuletz::control()
+{
+	m_motor->setPower(m_controller->getControlPower(m_position - m_encoder->getAngle()));
+}
+
+Motorash* motor1 = new Motorash( 1, Direction::forward);
+Encoderutz* enc1 = new Encoderutz(A1, 512);
+Controlerutz* ctrl1 = new Controlerutz( 1.0, 1.0, 1.0);
+
+Jointuletz* forearm = new Jointuletz(motor1, enc1, ctrl1);
 
 void setup()
 {
@@ -114,22 +190,21 @@ void loop()
 		switch(c)
 		{
 			case 'q':
-				motor1->setPower( 0.0);
+				forearm->setPosition( 0.0);
 				State = STOP;
 				break;
 			
-			case 'w':
-				motor1->setPower( 1.0);
+			case 'a':
+				forearm->setPosition( 0.2);
 				State = FWD;
 				break;
 
-			case 's':
-				motor1->setPower(-1.0);
+			case 'z':
+				forearm->setPosition(-0.2);
 				State = REV;
 				break;
 		}
 	}
-	Serial.println(analogRead(A3));
-	Serial.println(State);
+	forearm->control();
 	delay(200);
 }
