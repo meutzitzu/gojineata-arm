@@ -1,6 +1,6 @@
 #include<AFMotor.h>
 
-enum class Direction{ forward = 1, reverse =-1};
+enum class Direction:int{ forward = 1, reverse =-1};
 
 class Motorash
 {
@@ -28,14 +28,15 @@ class Encoderutz
  *	to measure the angle of the joints.
  */
 	
-	int m_center;
 	byte m_pin;
 	Direction m_direction;
 	
 	public:
-	Encoderutz( byte id, int center = 0);
+	int m_center;
+	Encoderutz( byte id, int center = 0, Direction direction = Direction::forward);
 	void setCenter( int center);
 	float getAngle();
+	int getRAW();
 };
 
 class Controlerutz
@@ -56,7 +57,6 @@ class Controlerutz
 class Jointuletz
 {
 	Motorash* m_motor;
-	Encoderutz* m_encoder;
 	Controlerutz* m_controller;
 
 	float m_lower_bound;
@@ -64,13 +64,17 @@ class Jointuletz
 	float m_position;
 
 	public:
+	Encoderutz* m_encoder;
 	Jointuletz( Motorash* motor, Encoderutz* encoder, Controlerutz* controller);
 	~Jointuletz();
 
 	void setBounds( float lower, float upper);
 	void setPosition( float angle);
+	void setPower( float power);
+	void zero();
 	void control();
 	float getPosition();
+	float getRAW();
 };
 
 
@@ -110,15 +114,27 @@ void Motorash::setPower( float power)
 	m_motor->run( m_power > 0 ? FORWARD : BACKWARD);
 }
 
-Encoderutz::Encoderutz( byte pin, int center)
+Encoderutz::Encoderutz( byte pin, int center, Direction direction)
 {
 	m_pin = pin;
 	m_center = center;
+	m_direction = direction;
+}
+
+int Encoderutz::getRAW()
+{
+	return analogRead(m_pin);
 }
 
 float Encoderutz::getAngle()
 {
-	return ((int)m_direction * (analogRead(m_pin)-m_center)/((350/180)*PI));
+	float sign = (float)static_cast<int>(m_direction);
+	return ( sign * (getRAW()-m_center)*((350.0/180)*3.141592f/1024));
+}
+
+void Encoderutz::setCenter( int center)
+{
+	m_center = center;
 }
 
 Controlerutz::Controlerutz( float kp, float ki, float kd)
@@ -169,49 +185,127 @@ void Jointuletz::setPosition( float position)
 	m_position = position;
 }
 
+void Jointuletz::setPower( float power)
+{
+	m_motor->setPower(power);
+}
+
+void Jointuletz::zero()
+{
+	m_encoder->setCenter(m_encoder->getRAW());
+}
+
+float Jointuletz::getPosition()
+{
+	return m_encoder->getAngle();
+}
+float Jointuletz::getRAW()
+{
+	return m_encoder->getRAW();
+}
+
 void Jointuletz::control()
 {
 	m_motor->setPower(m_controller->getControlPower(m_position - m_encoder->getAngle()));
 }
 
-Motorash* motor1 = new Motorash( 1, Direction::forward);
-Encoderutz* enc1 = new Encoderutz(A1, 512);
-Controlerutz* ctrl1 = new Controlerutz( 1.0, 1.0, 1.0);
+Motorash* motor1 = new Motorash( 3, Direction::forward);
+Encoderutz* enc1 = new Encoderutz(A3, 512, Direction::reverse);
+Controlerutz* ctrl1 = new Controlerutz( 5.0, 0.0, 0.0);
 
 Jointuletz* forearm = new Jointuletz(motor1, enc1, ctrl1);
+
+	enum state{STOP, MANUAL, AUTO};
+	float position = 0.0;
+	float power = 0.0;
+	state State = STOP;
 
 void setup()
 {
 //	motor.setSpeed(255);
 	Serial.begin(9600);
+	forearm->zero();
+
 }
 
 void loop()
 {
 	
-	enum state{STOP, FWD, REV};
-
-	state State = STOP;
 	if(Serial.available()){
 		char c = Serial.read();
 		switch(c)
 		{
-			case 'q':
-				forearm->setPosition( 0.0);
-				State = STOP;
-				break;
-			
-			case 'a':
-				forearm->setPosition( 0.2);
-				State = FWD;
+			case '\t':
+				if (State == AUTO)
+				{
+					State = MANUAL;
+				}
+				else if (State == MANUAL)
+				{
+					State = AUTO;
+				}
 				break;
 
-			case 'z':
-				forearm->setPosition(-0.2);
-				State = REV;
+			case 'd':
+				if (State == AUTO)
+				{
+					position += 0.05;
+				}
+				if (State == MANUAL)
+				{
+					power = 1.0;
+				}
+				break;
+
+			case 'a':
+				if (State == AUTO)
+				{
+					position -= 0.05;
+				}
+				if (State == MANUAL)
+				{
+					power =-1.0;
+				}
+				break;
+			case 's':
+				if (State == AUTO)
+				{
+					position = 0.0;
+				}
+				if (State == MANUAL)
+				{
+					power = 0.0;
+				}
+				break;
+			case 'q':
+				State = STOP;
+				break;
+			case 'w':
+				State = MANUAL;
+				break;
+			case 'e':
+				forearm->zero();
 				break;
 		}
 	}
-	forearm->control();
+	forearm->setPosition(position);	
+	switch(State)
+	{
+		case STOP:
+			forearm->setPower(0.0);
+		break;
+		case MANUAL:
+			forearm->setPower(power);
+		break;
+		case AUTO:
+			forearm->control();
+		break;
+	}
+	Serial.println(forearm->getRAW());
+	Serial.print("ACTUAL\t");
+	Serial.println(forearm->getPosition());
+	Serial.print("TARGET\t");
+	Serial.println(position);
+	Serial.println(State);
 	delay(200);
 }
