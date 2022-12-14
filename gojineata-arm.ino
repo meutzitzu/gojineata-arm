@@ -109,6 +109,8 @@ Direction Motorash::getDirection()
 void Motorash::setPower( float power)
 {
 	m_power = (int)(static_cast<int>(m_direction) * power);
+	Serial.print("SPEED:");
+	Serial.println(m_power);
 	m_truepower = (byte)(abs( 255 * m_power));
 	m_motor->setSpeed(m_truepower);
 	m_motor->run( m_power > 0 ? FORWARD : BACKWARD);
@@ -211,7 +213,7 @@ void Jointuletz::control()
 
 Motorash* motor1 = new Motorash( 3, Direction::forward);
 Encoderutz* enc1 = new Encoderutz(A3, 512, Direction::reverse);
-Controlerutz* ctrl1 = new Controlerutz( 5.0, 0.0, 0.0);
+Controlerutz* ctrl1 = new Controlerutz( 15.0, 0.5, 5.0);
 
 Jointuletz* forearm = new Jointuletz(motor1, enc1, ctrl1);
 
