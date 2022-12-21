@@ -211,23 +211,38 @@ void Jointuletz::control()
 	m_motor->setPower(m_controller->getControlPower(m_position - m_encoder->getAngle()));
 }
 
-Motorash* motor1 = new Motorash( 3, Direction::forward);
-Encoderutz* enc1 = new Encoderutz(A3, 512, Direction::reverse);
-Controlerutz* ctrl1 = new Controlerutz( 15.0, 0.5, 5.0);
+Motorash* motor1 = new Motorash( 1, Direction::forward);
+Encoderutz* enc1 = new Encoderutz(A1, 512, Direction::reverse);
+Controlerutz* ctrl1 = new Controlerutz( 15.0, 0.0, 0.0);
+//joints[0] = new Jointuletz(motor1, enc1, ctrl1);
 
-Jointuletz* forearm = new Jointuletz(motor1, enc1, ctrl1);
+Motorash* motor2 = new Motorash( 2, Direction::forward);
+Encoderutz* enc2 = new Encoderutz(A2, 512, Direction::reverse);
+Controlerutz* ctrl2 = new Controlerutz( 15.0, 0.0, 0.0);
+//joints[1] = new Jointuletz(motor2, enc2, ctrl2);
 
-	enum state{STOP, MANUAL, AUTO};
-	float position = 0.0;
-	float power = 0.0;
-	state State = STOP;
+Jointuletz* joints[2] = 
+	{ 
+		new Jointuletz(motor1, enc1, ctrl1), 
+		new Jointuletz(motor2, enc2, ctrl2),
+	};
+
+enum RunMode{STOP, MANUAL, AUTO};
+float position = 0.0;
+float power = 0.0;
+RunMode runmode = STOP;
+
+enum ManMotor{ WAIST = 0, FOREARM = 1};
+ManMotor manmotor;
+
 
 void setup()
 {
 //	motor.setSpeed(255);
-	Serial.begin(9600);
-	forearm->zero();
-
+	Serial.begin(115200);
+	joints[WAIST]->zero();
+	joints[FOREARM]->zero();
+	manmotor = WAIST;
 }
 
 void loop()
@@ -238,76 +253,84 @@ void loop()
 		switch(c)
 		{
 			case '\t':
-				if (State == AUTO)
+				if (runmode == AUTO)
 				{
-					State = MANUAL;
+					runmode = MANUAL;
 				}
-				else if (State == MANUAL)
+				else if (runmode == MANUAL)
 				{
-					State = AUTO;
+					runmode = AUTO;
 				}
 				break;
-
 			case 'd':
-				if (State == AUTO)
+				if (runmode == AUTO)
 				{
 					position += 0.05;
 				}
-				if (State == MANUAL)
+				if (runmode == MANUAL)
 				{
 					power = 1.0;
 				}
 				break;
-
 			case 'a':
-				if (State == AUTO)
+				if (runmode == AUTO)
 				{
 					position -= 0.05;
 				}
-				if (State == MANUAL)
+				if (runmode == MANUAL)
 				{
 					power =-1.0;
 				}
 				break;
 			case 's':
-				if (State == AUTO)
+				if (runmode == AUTO)
 				{
 					position = 0.0;
 				}
-				if (State == MANUAL)
+				if (runmode == MANUAL)
 				{
 					power = 0.0;
 				}
 				break;
 			case 'q':
-				State = STOP;
+				runmode = STOP;
 				break;
 			case 'w':
-				State = MANUAL;
+				runmode = MANUAL;
 				break;
 			case 'e':
-				forearm->zero();
+				joints[FOREARM]->zero();
 				break;
+/*	
+			default:
+				manmotor = constrain( '1'- c, 0, sizeof(joints)/sizeof(Jointuletz*));
+*/
 		}
 	}
-	forearm->setPosition(position);	
-	switch(State)
+	joints[FOREARM]->setPosition(position);	
+	switch(runmode)
 	{
 		case STOP:
-			forearm->setPower(0.0);
+			for( int i = 0; i<=sizeof(joints)/sizeof(Jointuletz*); ++i)
+			{
+				joints[i]->setPower(0.0);
+			}
 		break;
 		case MANUAL:
-			forearm->setPower(power);
+			joints[manmotor]->setPower(power);
 		break;
 		case AUTO:
-			forearm->control();
+			for( int i = 0; i<=sizeof(joints)/sizeof(Jointuletz*); ++i)
+			{
+				joints[i]->control();
+			}
 		break;
 	}
-	Serial.println(forearm->getRAW());
+	Serial.println(joints[FOREARM]->getRAW());
 	Serial.print("ACTUAL\t");
-	Serial.println(forearm->getPosition());
+	Serial.println(joints[FOREARM]->getPosition());
 	Serial.print("TARGET\t");
 	Serial.println(position);
-	Serial.println(State);
-	delay(200);
+	Serial.println(runmode);
+	delay(50);
 }
